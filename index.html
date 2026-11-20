@@ -62,6 +62,15 @@ button.ld{padding:2px 8px;font-size:.75rem;margin-top:4px;color:var(--accent);bo
 button.danger{background:var(--warn);color:var(--bg);border-color:var(--warn);font-weight:700}
 .sel{display:block;width:100%;margin-bottom:8px;flex:none}
 .act{margin-bottom:10px}.act button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:.88rem;line-height:1.2;padding:10px 6px}
+
+:root{--up:#1f7a3a;--dn:#c0392b}
+@media (prefers-color-scheme: dark){:root{--up:#6fd08a;--dn:#ff7b72}}
+.iw{position:relative}.iw input{padding-right:14px}
+.ar{position:absolute;right:4px;top:calc(50% - 1.5px);transform:translateY(-50%);font-size:.6rem;pointer-events:none;color:var(--muted)}
+.du input{border-color:var(--up);background:color-mix(in srgb,var(--up) 14%,var(--bg))}.du .ar{color:var(--up)}
+.dd input{border-color:var(--dn);background:color-mix(in srgb,var(--dn) 14%,var(--bg))}.dd .ar{color:var(--dn)}
+.mkbar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.78rem;color:var(--muted);margin-bottom:8px}
+.mkbar .up{color:var(--up)}.mkbar .dn{color:var(--dn)}.mkbar button{margin-top:0;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -138,16 +147,24 @@ function calc(m){
   return{p,ev,margin:(s-1)*100,best:order[0],gap:ev[order[0]]-ev[order[1]]};
 }
 const TAGS=['1','X','2'];
-function In({v,on,ph}){return h('input',{value:v,placeholder:ph,inputMode:'decimal',onChange:e=>on(e.target.value)});}
+const EXP=12*3600*1000;
+const dirs=(oldV,newV)=>newV.map((v,i)=>{const a=num(oldV[i]),b=num(v);if(!(a>0)||!(b>0))return null;return b>a?1:b<a?-1:0;});
+function In({v,on,ph,dir}){
+  const inp=h('input',{value:v,placeholder:ph,inputMode:'decimal',onChange:e=>on(e.target.value)});
+  if(dir==null)return inp;
+  return h('div',{className:'iw '+(dir>0?'du':dir<0?'dd':'de')},inp,h('span',{className:'ar'},dir>0?'▲':dir<0?'▼':'•'));
+}
 const Ic=(...k)=>h('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true',style:{flex:'none'}},...k);
 const icCloud=Ic(h('path',{d:'M12 13v8l-4-4'}),h('path',{d:'m12 21 4-4'}),h('path',{d:'M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284'}));
 const icClip=Ic(h('rect',{x:8,y:2,width:8,height:4,rx:1}),h('path',{d:'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'}));
 function Row({m,set,del,fixed,onLoad,lock}){
   const r=calc(m),ok=r&&r.ev;
-  const upd=(k,j,v)=>set({...m,[k]:m[k].map((x,n)=>n===j?v:x)});
+  const live=m.mk&&Date.now()-m.mk.t<EXP;
+  const dr=(k,j)=>live&&m.mk[k]?m.mk[k][j]:null;
+  const upd=(k,j,v)=>set({...m,[k]:m[k].map((x,n)=>n===j?v:x),mk:m.mk&&m.mk[k]?{...m.mk,[k]:m.mk[k].map((d,n)=>n===j?null:d)}:m.mk});
   const cell=j=>h('td',{key:j,className:ok&&r.best===j?'best':''},
-    h(In,{v:m.o[j],ph:'Quote',on:v=>upd('o',j,v)}),
-    h(In,{v:m.pt[j],ph:'Pkt',on:v=>upd('pt',j,v)}),
+    h(In,{v:m.o[j],ph:'Quote',dir:dr('o',j),on:v=>upd('o',j,v)}),
+    h(In,{v:m.pt[j],ph:'Pkt',dir:dr('pt',j),on:v=>upd('pt',j,v)}),
     ok&&h('div',{className:'ew'},fmt(r.ev[j])));
   return h('tr',null,
     h('td',{className:'team'},fixed?[h('div',{key:1},m.home),h('div',{key:2},m.away),h('div',{key:3,className:'lab'},m.info),onLoad&&h('button',{key:4,className:'ld',disabled:lock,onClick:onLoad,'aria-label':'Quoten dieses Spiels laden'},'↻ Quote')]
@@ -218,7 +235,7 @@ function App(){
   const {tab,sel,data,cu}=st,put=p=>setSt({...st,...p});
   const cur=data[sel]||mkMd(sel);
   const setCur=l=>put({data:{...data,[sel]:l}});
-  const setOdd=(n,id,o)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>x.id===id?{...x,o}:x)}}));
+  const setOdd=(n,id,o)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>x.id===id?{...x,o,mk:{...(x.mk&&Date.now()-x.mk.t<EXP?x.mk:{}),o:dirs(x.o,o),t:Date.now()}}:x)}}));
   const applyKt=()=>{
     const lines=ptxt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
     const games=[];let buf=[];
@@ -233,11 +250,13 @@ function App(){
     Object.keys(SP).forEach(k=>{const c=cnt(+k);if(c>bc){bc=c;best=+k;}});
     if(bc===0){setMsg('Die eingefügten Spiele passen zu keinem Spieltag.');return;}
     const list=data[best]||mkMd(best);let ok=0;
-    const nl=list.map(m=>{const g=games.find(g=>g.h===REV[m.home]&&g.a===REV[m.away]);if(!g)return m;ok++;return{...m,pt:g.pt};});
+    const nl=list.map(m=>{const g=games.find(g=>g.h===REV[m.home]&&g.a===REV[m.away]);if(!g)return m;ok++;return{...m,pt:g.pt,mk:{...(m.mk&&Date.now()-m.mk.t<EXP?m.mk:{}),pt:dirs(m.pt,g.pt),t:Date.now()}};});
     setSt(p=>({...p,sel:best,data:{...p.data,[best]:nl}}));
     setMsg(ok+' von '+list.length+' Spielen übernommen (Spieltag '+best+').'+(games.length>ok?' '+(games.length-ok)+' eingefügte Spiele nicht zugeordnet.':''));
     setPaste(false);setPtxt('');
   };
+  const hasMk=cur.some(m=>m.mk&&Date.now()-m.mk.t<EXP);
+  const clearMk=()=>setCur(cur.map(m=>m.mk?{...m,mk:undefined}:m));
   const findFx=(list,m)=>list.find(x=>x.h===REV[m.home]&&x.a===REV[m.away]);
   const getOdds=async()=>{
     if(!key){setInfo(true);setMsg('Bitte zuerst den API-Schlüssel eintragen.');return;}
@@ -281,6 +300,8 @@ function App(){
       h('p',null,'Spieltag im Dropdown wählen. 1. „Tipico-Quoten laden“ holt die Quoten für alle Spiele, „↻ Quote“ neben einem Spiel nur für dieses. 2. „Kicktipp-Quoten einfügen“: In Kicktipp die Spiele-Liste kopieren und einfügen, die App erkennt den Spieltag selbst. 3. In der Spalte „Tipp“ steht die Empfehlung.'),
       h('b',null,'Tabelle lesen'),
       h('p',null,'Spalten: 1 = Heimsieg, X = Unentschieden, 2 = Auswärtssieg. In jedem Feld steht oben die Tipico-Quote, darunter die Kicktipp-Punkte, klein der Erwartungswert. Grün = bester Tipp. Gelb = knapp (Vorsprung unter 0,3): dann kurz vor Anpfiff die Quote erneut laden.'),
+      h('b',null,'Änderungen markieren'),
+      h('p',null,'Nach jedem Laden (Tipico, einzeln oder alle) und nach „Kicktipp-Quoten einfügen“ zeigen kleine Pfeile, was sich gegenüber vorher geändert hat: ▲ grün = höher, ▼ rot = niedriger, • grau = geprüft und gleich. Die Markierungen bleiben 12 Stunden. Du kannst sie mit „Ausblenden“ über der Tabelle entfernen. Tippst du selbst einen Wert ein, verschwindet die Markierung an diesem Feld. Beim ersten Laden gibt es keinen Vergleichswert, dort erscheint kein Pfeil.'),
       h('b',null,'Quoten aktualisieren und Abrufe sparen'),
       h('p',null,'Erneut laden überschreibt die Quote, die Punkte bleiben. Kostenlos sind 250 Abrufe im Monat: alle 9 Spiele kosten bis zu 10, ein einzelnes Spiel 1 (beim ersten Mal eines Spieltags 2). Der Spielplan wird gemerkt.'),
       h('b',null,'Eigene Spiele'),
@@ -318,6 +339,9 @@ function App(){
         h('div',{className:'row',style:{marginTop:8}},
           h('button',{className:'primary',onClick:applyKt},'Übernehmen'),
           h('button',{onClick:()=>setPaste(false)},'Abbrechen'))),
+      hasMk&&h('div',{className:'mkbar'},
+        h('span',null,'Änderungen: ',h('b',{className:'up'},'▲ höher'),' ',h('b',{className:'dn'},'▼ niedriger'),' • gleich'),
+        h('button',{className:'ld',onClick:clearMk},'Ausblenden')),
       h(Tbl,{rows:cur,fixed:true,lock:busy,onLoad:loadOne,set:n=>setCur(cur.map(x=>x.id===n.id?n:x))}),
       legend,
       h('p',{className:'note'},'Spielplan: DFL, Stand 02.07.2026, Anstoßzeiten können sich ändern. Quoten: Tipico über OddsPapi, ohne Gewähr. Alle Werte lassen sich überschreiben.'))
