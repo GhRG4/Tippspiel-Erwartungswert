@@ -58,6 +58,8 @@ select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid 
 .ibtn{width:26px;height:26px;padding:0;border-radius:50%;font-weight:700;font-style:italic;font-family:Georgia,serif;line-height:1;color:var(--accent);border-color:var(--accent)}
 .infobox{margin-top:8px}.infobox p{margin:2px 0 10px;font-size:.9rem}
 textarea{width:100%;font:inherit;font-size:.85rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px}
+button.ld{padding:2px 8px;font-size:.75rem;margin-top:4px;color:var(--accent);border-color:var(--accent)}
+button.danger{background:var(--warn);color:var(--bg);border-color:var(--warn);font-weight:700}
 </style>
 </head>
 <body>
@@ -135,7 +137,7 @@ function calc(m){
 }
 const TAGS=['1','X','2'];
 function In({v,on,ph}){return h('input',{value:v,placeholder:ph,inputMode:'decimal',onChange:e=>on(e.target.value)});}
-function Row({m,set,del,fixed}){
+function Row({m,set,del,fixed,onLoad,lock}){
   const r=calc(m),ok=r&&r.ev;
   const upd=(k,j,v)=>set({...m,[k]:m[k].map((x,n)=>n===j?v:x)});
   const cell=j=>h('td',{key:j,className:ok&&r.best===j?'best':''},
@@ -143,17 +145,17 @@ function Row({m,set,del,fixed}){
     h(In,{v:m.pt[j],ph:'Pkt',on:v=>upd('pt',j,v)}),
     ok&&h('div',{className:'ew'},fmt(r.ev[j])));
   return h('tr',null,
-    h('td',{className:'team'},fixed?[h('div',{key:1},m.home),h('div',{key:2},m.away),h('div',{key:3,className:'lab'},m.info)]
+    h('td',{className:'team'},fixed?[h('div',{key:1},m.home),h('div',{key:2},m.away),h('div',{key:3,className:'lab'},m.info),onLoad&&h('button',{key:4,className:'ld',disabled:lock,onClick:onLoad,'aria-label':'Quoten dieses Spiels laden'},'↻ Quote')]
       :[h('input',{key:1,value:m.home,placeholder:'Heim',onChange:e=>set({...m,home:e.target.value})}),
         h('input',{key:2,value:m.away,placeholder:'Gast',onChange:e=>set({...m,away:e.target.value})}),
         h('button',{key:3,className:'x',onClick:del,'aria-label':'Spiel löschen'},'✕')]),
     cell(0),cell(1),cell(2),
     h('td',{className:'tp'+(ok&&r.gap<0.3?' close':'')},ok?[h('div',{key:1},TAGS[r.best]),h('div',{key:2,className:'ew'},'+'+fmt(r.gap))]:'–'));
 }
-function Tbl({rows,set,del,fixed}){
+function Tbl({rows,set,del,fixed,onLoad,lock}){
   return h('table',null,
     h('thead',null,h('tr',null,h('th',null,'Spiel'),...TAGS.map(t=>h('th',{key:t},t)),h('th',null,'Tipp'))),
-    h('tbody',null,rows.map(m=>h(Row,{key:m.id,m,fixed,set:set,del:del&&(()=>del(m))}))));
+    h('tbody',null,rows.map(m=>h(Row,{key:m.id,m,fixed,lock,set:set,del:del&&(()=>del(m)),onLoad:onLoad&&(()=>onLoad(m))}))));
 }
 const KEYK='oddspapi-key-v1';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -175,6 +177,24 @@ function windowOf(n){
   const iso=t=>new Date(t).toISOString();
   return[iso(end-5*864e5).slice(0,10)+'T00:00:00Z',iso(end+864e5).slice(0,10)];
 }
+const FXK='tippspiel-fx-v1';
+async function fixturesFor(n,key,force){
+  let c={};try{c=JSON.parse(localStorage.getItem(FXK))||{};}catch(e){}
+  if(!force&&c[n]&&c[n].length)return c[n];
+  const [from,to]=windowOf(n);
+  const fx=await api('fixtures',{tournamentId:35,from,to},key);
+  const arr=Array.isArray(fx)?fx:(fx&&fx.fixtures)||[];
+  const list=arr.map(x=>({id:x.fixtureId,h:codeOf(x.participant1Name),a:codeOf(x.participant2Name)}));
+  if(list.length){c[n]=list;try{localStorage.setItem(FXK,JSON.stringify(c));}catch(e){}}
+  return list;
+}
+async function oddsFor(id,key){
+  const d=await api('odds',{fixtureId:id,bookmakers:'tipico'},key);
+  const oc=d.bookmakerOdds.tipico.markets['101'].outcomes;
+  const pr=['101','102','103'].map(k=>oc[k].players['0'].price);
+  if(!pr.every(x=>x>1))throw new Error('kein Preis');
+  return pr.map(x=>Number(x).toFixed(2).replace('.',','));
+}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.data&&typeof s.data==='object'&&Array.isArray(s.cu))return s;}catch(e){}
   return{tab:'md',sel:10,data:{},cu:[mk()]};
@@ -188,6 +208,7 @@ function App(){
   const [busy,setBusy]=useState(false);
   const [paste,setPaste]=useState(false);
   const [ptxt,setPtxt]=useState('');
+  const [cr,setCr]=useState(false);
   useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}},[st]);
   const {tab,sel,data,cu}=st,put=p=>setSt({...st,...p});
   const cur=data[sel]||mkMd(sel);
@@ -212,27 +233,21 @@ function App(){
     setMsg(ok+' von '+list.length+' Spielen übernommen (Spieltag '+best+').'+(games.length>ok?' '+(games.length-ok)+' eingefügte Spiele nicht zugeordnet.':''));
     setPaste(false);setPtxt('');
   };
+  const findFx=(list,m)=>list.find(x=>x.h===REV[m.home]&&x.a===REV[m.away]);
   const getOdds=async()=>{
     if(!key){setInfo(true);setMsg('Bitte zuerst den API-Schlüssel eintragen.');return;}
     setBusy(true);setMsg('Lade Spielplan …');
     try{
-      const [from,to]=windowOf(sel);
-      const fx=await api('fixtures',{tournamentId:35,from,to},key);
-      const list=Array.isArray(fx)?fx:(fx&&fx.fixtures)||[];
+      let list=await fixturesFor(sel,key);
+      if(cur.some(m=>!findFx(list,m)))list=await fixturesFor(sel,key,true);
       let ok=0;const miss=[];
       for(let i=0;i<cur.length;i++){
-        const m=cur[i],ha=REV[m.home],aw=REV[m.away];
-        const f=list.find(x=>codeOf(x.participant1Name)===ha&&codeOf(x.participant2Name)===aw);
+        const m=cur[i],f=findFx(list,m);
         if(!f){miss.push(m.home+' – '+m.away+' (nicht gefunden)');continue;}
         setMsg('Lade Tipico-Quoten '+(i+1)+'/'+cur.length+' …');
         await sleep(1100);
-        try{
-          const d=await api('odds',{fixtureId:f.fixtureId,bookmakers:'tipico'},key);
-          const oc=d.bookmakerOdds.tipico.markets['101'].outcomes;
-          const pr=['101','102','103'].map(k=>oc[k].players['0'].price);
-          if(!pr.every(x=>x>1))throw new Error('kein Preis');
-          setOdd(sel,m.id,pr.map(x=>Number(x).toFixed(2).replace('.',',')));ok++;
-        }catch(e){miss.push(m.home+' – '+m.away+' (kein Tipico-Preis)');}
+        try{setOdd(sel,m.id,await oddsFor(f.id,key));ok++;}
+        catch(e){miss.push(m.home+' – '+m.away+' (kein Tipico-Preis)');}
       }
       setMsg(ok+' von '+cur.length+' Spielen aktualisiert.'+(miss.length?' Fehlt: '+miss.join('; ')+'.':''));
     }catch(e){
@@ -240,24 +255,48 @@ function App(){
     }
     setBusy(false);
   };
+  const loadOne=async m=>{
+    if(!key){setInfo(true);setMsg('Bitte zuerst den API-Schlüssel eintragen.');return;}
+    setBusy(true);setMsg(m.home+' – '+m.away+': lade …');
+    try{
+      let list=await fixturesFor(sel,key),f=findFx(list,m);
+      if(!f){list=await fixturesFor(sel,key,true);f=findFx(list,m);}
+      if(!f)throw new Error('Spiel bei OddsPapi nicht gefunden');
+      setOdd(sel,m.id,await oddsFor(f.id,key));
+      setMsg(m.home+' – '+m.away+': Quoten aktualisiert.');
+    }catch(e){setMsg(m.home+' – '+m.away+': '+e.message+'.');}
+    setBusy(false);
+  };
   const legend=h('p',{className:'note'},'Je Feld: oben Quote, darunter Tippspiel-Punkte, klein der Erwartungswert. Grün = bester Tipp, gelb = knapp (Vorsprung unter 0,3).');
   return h('div',null,
     h('div',{className:'ttl'},h('h1',null,'Tippspiel-Rechner'),
       h('button',{className:'ibtn','aria-label':'Info zu den Quoten','aria-expanded':info,onClick:()=>setInfo(!info)},'i')),
     info&&h('div',{className:'card infobox'},
-      h('b',null,'Quoten abrufen'),
-      h('p',null,'Spieltag wählen und „Tipico-Quoten laden“ tippen. Die Seite holt die Tipico-Quote (1, X, 2) für jedes Spiel über OddsPapi und trägt sie ein. Deine Tippspiel-Punkte bleiben erhalten.'),
-      h('b',null,'Aktualisieren'),
-      h('p',null,'Einfach nochmal laden, am besten kurz vor Anpfiff. Das überschreibt die Quoten. Ein Spieltag verbraucht bis zu 10 der 250 kostenlosen Abrufe im Monat.'),
+      h('b',null,'Ablauf pro Spieltag'),
+      h('p',null,'Spieltag im Dropdown wählen. 1. „Tipico-Quoten laden“ holt die Quoten für alle Spiele, „↻ Quote“ neben einem Spiel nur für dieses. 2. „Kicktipp-Quoten einfügen“: In Kicktipp die Spiele-Liste kopieren und einfügen, die App erkennt den Spieltag selbst. 3. In der Spalte „Tipp“ steht die Empfehlung.'),
+      h('b',null,'Tabelle lesen'),
+      h('p',null,'Spalten: 1 = Heimsieg, X = Unentschieden, 2 = Auswärtssieg. In jedem Feld steht oben die Tipico-Quote, darunter die Kicktipp-Punkte, klein der Erwartungswert. Grün = bester Tipp. Gelb = knapp (Vorsprung unter 0,3): dann kurz vor Anpfiff die Quote erneut laden.'),
+      h('b',null,'Quoten aktualisieren und Abrufe sparen'),
+      h('p',null,'Erneut laden überschreibt die Quote, die Punkte bleiben. Kostenlos sind 250 Abrufe im Monat: alle 9 Spiele kosten bis zu 10, ein einzelnes Spiel 1 (beim ersten Mal eines Spieltags 2). Der Spielplan wird gemerkt.'),
+      h('b',null,'Eigene Spiele'),
+      h('p',null,'Im Reiter „Eigene Spiele“ trägst du beliebige Spiele mit Quoten und Punkten von Hand ein.'),
+      h('b',null,'Selbst anpassen und Speicherung'),
+      h('p',null,'Jede Quote und jeder Punktwert lässt sich von Hand überschreiben. Alle Eingaben bleiben auf diesem Gerät gespeichert, auch nach dem Schließen der App.'),
       h('b',null,'API-Schlüssel'),
       h('p',null,key?'Gespeichert in diesem Browser. Er wird nur an OddsPapi gesendet.':'Kostenlosen Schlüssel auf oddspapi.io erstellen und hier einfügen. Er bleibt nur in diesem Browser.'),
       h('div',{className:'row',style:{marginBottom:10}},
         h('input',{type:'password',value:keyIn,placeholder:key?'Neuer Schlüssel':'API-Schlüssel',autoComplete:'off',onChange:e=>setKeyIn(e.target.value),style:{textAlign:'left'}}),
         h('button',{onClick:()=>{const v=keyIn.trim();if(!v)return;try{localStorage.setItem(KEYK,v);}catch(e){}setKey(v);setKeyIn('');setMsg('Schlüssel gespeichert.');}},'Speichern'),
         key&&h('button',{onClick:()=>{try{localStorage.removeItem(KEYK);}catch(e){}setKey('');}},'Löschen')),
-      h('b',null,'Selbst anpassen'),
-      h('p',null,'Jede Quote lässt sich jederzeit von Hand überschreiben.'),
-      h('button',{onClick:()=>setInfo(false)},'Schließen')),
+      h('b',null,'Spieltag zurücksetzen'),
+      h('p',null,'Löscht alle Quoten und Punkte von Spieltag '+sel+'. Die Quoten musst du danach neu laden.'),
+      cr?h('div',{className:'row',style:{marginBottom:10}},
+          h('button',{className:'danger',onClick:()=>{setMsg('');setCur(mkMd(sel));setCr(false);setInfo(false);}},'Ja, löschen'),
+          h('button',{onClick:()=>setCr(false)},'Abbrechen'))
+        :h('button',{style:{marginBottom:10},onClick:()=>setCr(true)},'Spieltag '+sel+' zurücksetzen'),
+      h('b',null,'Hinweise'),
+      h('p',null,'Spielplan laut DFL, Stand 02.07.2026, Anstoßzeiten können sich ändern. Quoten ohne Gewähr. Fehlermeldungen erscheinen oben über der Tabelle.'),
+      h('button',{onClick:()=>{setInfo(false);setCr(false);}},'Schließen')),
     h('div',{className:'tabs'},
       h('button',{className:tab==='md'?'on':'',onClick:()=>put({tab:'md'})},'Bundesliga'),
       h('button',{className:tab==='cu'?'on':'',onClick:()=>put({tab:'cu'})},'Eigene Spiele')),
@@ -266,8 +305,7 @@ function App(){
         h('select',{value:sel,onChange:e=>{setMsg('');put({sel:+e.target.value});},'aria-label':'Spieltag'},
           Object.keys(SP).map(n=>h('option',{key:n,value:n},n+'. Spieltag · '+SP[n][0]))),
         h('button',{className:'primary',disabled:busy,onClick:getOdds},busy?'Lädt …':'Tipico-Quoten laden'),
-        h('button',{onClick:()=>setPaste(!paste)},'Punkte einfügen'),
-        h('button',{onClick:()=>{setMsg('');setCur(mkMd(sel));},'aria-label':'Spieltag zurücksetzen'},'↺')),
+        h('button',{onClick:()=>setPaste(!paste)},'Kicktipp-Quoten einfügen')),
       msg&&h('p',{className:'note',style:{marginTop:0,color:'var(--warn)'}},msg),
       paste&&h('div',{className:'card'},
         h('p',{className:'note',style:{marginTop:0}},'In Kicktipp die Spiele-Liste markieren, kopieren und hier einfügen. Die Seite erkennt den Spieltag selbst.'),
@@ -275,7 +313,7 @@ function App(){
         h('div',{className:'row',style:{marginTop:8}},
           h('button',{className:'primary',onClick:applyKt},'Übernehmen'),
           h('button',{onClick:()=>setPaste(false)},'Abbrechen'))),
-      h(Tbl,{rows:cur,fixed:true,set:n=>setCur(cur.map(x=>x.id===n.id?n:x))}),
+      h(Tbl,{rows:cur,fixed:true,lock:busy,onLoad:loadOne,set:n=>setCur(cur.map(x=>x.id===n.id?n:x))}),
       legend,
       h('p',{className:'note'},'Spielplan: DFL, Stand 02.07.2026, Anstoßzeiten können sich ändern. Quoten: Tipico über OddsPapi, ohne Gewähr. Alle Werte lassen sich überschreiben.'))
     :h('div',null,
