@@ -60,6 +60,8 @@ select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid 
 textarea{width:100%;font:inherit;font-size:.85rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px}
 button.ld{padding:2px 8px;font-size:.75rem;margin-top:4px;color:var(--accent);border-color:var(--accent)}
 button.danger{background:var(--warn);color:var(--bg);border-color:var(--warn);font-weight:700}
+.sel{display:block;width:100%;margin-bottom:8px;flex:none}
+.act{margin-bottom:10px}.act button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:.88rem;line-height:1.2;padding:10px 6px}
 </style>
 </head>
 <body>
@@ -137,6 +139,9 @@ function calc(m){
 }
 const TAGS=['1','X','2'];
 function In({v,on,ph}){return h('input',{value:v,placeholder:ph,inputMode:'decimal',onChange:e=>on(e.target.value)});}
+const Ic=(...k)=>h('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true',style:{flex:'none'}},...k);
+const icCloud=Ic(h('path',{d:'M12 13v8l-4-4'}),h('path',{d:'m12 21 4-4'}),h('path',{d:'M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284'}));
+const icClip=Ic(h('rect',{x:8,y:2,width:8,height:4,rx:1}),h('path',{d:'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'}));
 function Row({m,set,del,fixed,onLoad,lock}){
   const r=calc(m),ok=r&&r.ev;
   const upd=(k,j,v)=>set({...m,[k]:m[k].map((x,n)=>n===j?v:x)});
@@ -301,11 +306,11 @@ function App(){
       h('button',{className:tab==='md'?'on':'',onClick:()=>put({tab:'md'})},'Bundesliga'),
       h('button',{className:tab==='cu'?'on':'',onClick:()=>put({tab:'cu'})},'Eigene Spiele')),
     tab==='md'?h('div',null,
-      h('div',{className:'row',style:{marginBottom:10,flexWrap:'wrap'}},
-        h('select',{value:sel,onChange:e=>{setMsg('');put({sel:+e.target.value});},'aria-label':'Spieltag'},
-          Object.keys(SP).map(n=>h('option',{key:n,value:n},n+'. Spieltag · '+SP[n][0]))),
-        h('button',{className:'primary',disabled:busy,onClick:getOdds},busy?'Lädt …':'Tipico-Quoten laden'),
-        h('button',{onClick:()=>setPaste(!paste)},'Kicktipp-Quoten einfügen')),
+      h('select',{className:'sel',value:sel,onChange:e=>{setMsg('');put({sel:+e.target.value});},'aria-label':'Spieltag'},
+        Object.keys(SP).map(n=>h('option',{key:n,value:n},n+'. Spieltag · '+SP[n][0].replace(/\.20(\d\d)/,'.$1')))),
+      h('div',{className:'row act'},
+        h('button',{className:'primary',disabled:busy,onClick:getOdds},icCloud,busy?'Lädt …':'Tipico-Quoten laden'),
+        h('button',{onClick:()=>setPaste(!paste)},icClip,'Kicktipp-Quoten einfügen')),
       msg&&h('p',{className:'note',style:{marginTop:0,color:'var(--warn)'}},msg),
       paste&&h('div',{className:'card'},
         h('p',{className:'note',style:{marginTop:0}},'In Kicktipp die Spiele-Liste markieren, kopieren und hier einfügen. Die Seite erkennt den Spieltag selbst.'),
