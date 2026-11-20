@@ -57,6 +57,7 @@ select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid 
 .ttl{display:flex;align-items:center;gap:10px}.ttl h1{margin:4px 0}
 .ibtn{width:26px;height:26px;padding:0;border-radius:50%;font-weight:700;font-style:italic;font-family:Georgia,serif;line-height:1;color:var(--accent);border-color:var(--accent)}
 .infobox{margin-top:8px}.infobox p{margin:2px 0 10px;font-size:.9rem}
+textarea{width:100%;font:inherit;font-size:.85rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px}
 </style>
 </head>
 <body>
@@ -185,11 +186,32 @@ function App(){
   const [key,setKey]=useState(()=>{try{return localStorage.getItem(KEYK)||'';}catch(e){return '';}});
   const [keyIn,setKeyIn]=useState('');
   const [busy,setBusy]=useState(false);
+  const [paste,setPaste]=useState(false);
+  const [ptxt,setPtxt]=useState('');
   useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}},[st]);
   const {tab,sel,data,cu}=st,put=p=>setSt({...st,...p});
   const cur=data[sel]||mkMd(sel);
   const setCur=l=>put({data:{...data,[sel]:l}});
   const setOdd=(n,id,o)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>x.id===id?{...x,o}:x)}}));
+  const applyKt=()=>{
+    const lines=ptxt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    const games=[];let buf=[];
+    for(const l of lines){
+      const m=l.match(/^Punkteregel:\s*(\d+)\s*-\s*(\d+)\s*-\s*(\d+)/i);
+      if(m){if(buf.length>=2)games.push({h:codeOf(buf[buf.length-2]),a:codeOf(buf[buf.length-1]),pt:[m[1],m[2],m[3]]});buf=[];}
+      else if(/[A-Za-zÄÖÜäöüß]{3,}/.test(l))buf.push(l);
+    }
+    if(!games.length){setMsg('Keine Punkteregeln gefunden. Kopiere die Spiele-Liste aus Kicktipp und füge sie vollständig ein.');return;}
+    const cnt=n=>(data[n]||mkMd(n)).filter(m=>games.some(g=>g.h===REV[m.home]&&g.a===REV[m.away])).length;
+    let best=sel,bc=cnt(sel);
+    Object.keys(SP).forEach(k=>{const c=cnt(+k);if(c>bc){bc=c;best=+k;}});
+    if(bc===0){setMsg('Die eingefügten Spiele passen zu keinem Spieltag.');return;}
+    const list=data[best]||mkMd(best);let ok=0;
+    const nl=list.map(m=>{const g=games.find(g=>g.h===REV[m.home]&&g.a===REV[m.away]);if(!g)return m;ok++;return{...m,pt:g.pt};});
+    setSt(p=>({...p,sel:best,data:{...p.data,[best]:nl}}));
+    setMsg(ok+' von '+list.length+' Spielen übernommen (Spieltag '+best+').'+(games.length>ok?' '+(games.length-ok)+' eingefügte Spiele nicht zugeordnet.':''));
+    setPaste(false);setPtxt('');
+  };
   const getOdds=async()=>{
     if(!key){setInfo(true);setMsg('Bitte zuerst den API-Schlüssel eintragen.');return;}
     setBusy(true);setMsg('Lade Spielplan …');
@@ -244,8 +266,15 @@ function App(){
         h('select',{value:sel,onChange:e=>{setMsg('');put({sel:+e.target.value});},'aria-label':'Spieltag'},
           Object.keys(SP).map(n=>h('option',{key:n,value:n},n+'. Spieltag · '+SP[n][0]))),
         h('button',{className:'primary',disabled:busy,onClick:getOdds},busy?'Lädt …':'Tipico-Quoten laden'),
+        h('button',{onClick:()=>setPaste(!paste)},'Punkte einfügen'),
         h('button',{onClick:()=>{setMsg('');setCur(mkMd(sel));},'aria-label':'Spieltag zurücksetzen'},'↺')),
       msg&&h('p',{className:'note',style:{marginTop:0,color:'var(--warn)'}},msg),
+      paste&&h('div',{className:'card'},
+        h('p',{className:'note',style:{marginTop:0}},'In Kicktipp die Spiele-Liste markieren, kopieren und hier einfügen. Die Seite erkennt den Spieltag selbst.'),
+        h('textarea',{value:ptxt,rows:6,placeholder:'Hier einfügen …',onChange:e=>setPtxt(e.target.value)}),
+        h('div',{className:'row',style:{marginTop:8}},
+          h('button',{className:'primary',onClick:applyKt},'Übernehmen'),
+          h('button',{onClick:()=>setPaste(false)},'Abbrechen'))),
       h(Tbl,{rows:cur,fixed:true,set:n=>setCur(cur.map(x=>x.id===n.id?n:x))}),
       legend,
       h('p',{className:'note'},'Spielplan: DFL, Stand 02.07.2026, Anstoßzeiten können sich ändern. Quoten: Tipico über OddsPapi, ohne Gewähr. Alle Werte lassen sich überschreiben.'))
