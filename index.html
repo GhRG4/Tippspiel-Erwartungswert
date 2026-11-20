@@ -71,6 +71,11 @@ button.danger{background:var(--warn);color:var(--bg);border-color:var(--warn);fo
 .dd input{border-color:var(--dn);background:color-mix(in srgb,var(--dn) 14%,var(--bg))}.dd .ar{color:var(--dn)}
 .mkbar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.78rem;color:var(--muted);margin-bottom:8px}
 .mkbar .up{color:var(--up)}.mkbar .dn{color:var(--dn)}.mkbar button{margin-top:0;white-space:nowrap}
+
+.tabs button{font-size:.8rem;padding:9px 2px}
+tbody.mg tr:first-child td{border-top:2px solid var(--line)}
+.srow2{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.85rem}.srow2:last-child{border-bottom:0}
+.seg{display:flex;gap:4px}.seg button{padding:4px 12px;font-size:.85rem}.seg button.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);font-weight:700}
 </style>
 </head>
 <body>
@@ -210,12 +215,88 @@ async function fixturesFor(n,key,force){
   if(list.length){c[n]=list;try{localStorage.setItem(FXK,JSON.stringify(c));}catch(e){}}
   return list;
 }
+const fmtO=x=>Number(x).toFixed(2).replace('.',',');
 async function oddsFor(id,key){
-  const d=await api('odds',{fixtureId:id,bookmakers:'tipico'},key);
-  const oc=d.bookmakerOdds.tipico.markets['101'].outcomes;
-  const pr=['101','102','103'].map(k=>oc[k].players['0'].price);
-  if(!pr.every(x=>x>1))throw new Error('kein Preis');
-  return pr.map(x=>Number(x).toFixed(2).replace('.',','));
+  const d=await api('odds',{fixtureId:id,bookmakers:'tipico,pinnacle'},key);
+  const bo=d.bookmakerOdds||{};
+  const get=slug=>{try{
+    const oc=bo[slug].markets['101'].outcomes;
+    const pl=['101','102','103'].map(k=>oc[k].players['0']);
+    if(pl.some(x=>x.active===false||!(x.price>1)))return null;
+    return pl.map(x=>fmtO(x.price));
+  }catch(e){return null;}};
+  const t=get('tipico');
+  if(!t)throw new Error('kein Tipico-Preis');
+  return{t,p:get('pinnacle')};
+}
+const HK='tippspiel-hist-v1';
+const loadH=()=>{try{return JSON.parse(localStorage.getItem(HK))||{};}catch(e){return {};}};
+const saveH=H=>{try{localStorage.setItem(HK,JSON.stringify(H));}catch(e){}};
+const mkey=(n,m)=>n+'|'+REV[m.home]+'-'+REV[m.away];
+const full=a=>Array.isArray(a)&&a.length===3&&a.every(x=>num(x)>1);
+const fullP=a=>Array.isArray(a)&&a.length===3&&a.every(x=>num(x)>0);
+function snapH(n,m,o,po,pt){
+  if(!full(o)||!REV[m.home]||!REV[m.away])return;
+  const H=loadH(),k=mkey(n,m);
+  const e=H[k]||{md:n,home:m.home,away:m.away,snaps:[],res:null};
+  const sn={t:Date.now(),o:o.slice(),po:full(po)?po.slice():['','',''],pt:(pt||['','','']).slice()};
+  const l=e.snaps[e.snaps.length-1];
+  if(l&&JSON.stringify([l.o,l.po,l.pt])===JSON.stringify([sn.o,sn.po,sn.pt]))l.t=sn.t;
+  else{e.snaps.push(sn);if(e.snaps.length>30)e.snaps.shift();}
+  H[k]=e;saveH(H);
+}
+const probOf=o=>{const i=o.map(x=>1/num(x)),s=i.reduce((a,b)=>a+b,0);return i.map(x=>x/s);};
+const argmax=a=>a.indexOf(Math.max(...a));
+function evalH(H){
+  const R={all:0,T:{n:0,pts:0,exp:0},P:{n:0,pts:0,exp:0},F:{n:0,pts:0,exp:0}};
+  Object.values(H).forEach(e=>{
+    if(e.res!==0&&e.res!==1&&e.res!==2)return;
+    let s=null;for(let i=e.snaps.length-1;i>=0;i--){if(full(e.snaps[i].o)&&fullP(e.snaps[i].pt)){s=e.snaps[i];break;}}
+    if(!s)return;
+    R.all++;
+    const pt=s.pt.map(num),pT=probOf(s.o),evT=pT.map((p,i)=>p*pt[i]);
+    const add=(k,tip,ev)=>{R[k].n++;R[k].pts+=tip===e.res?pt[tip]:0;R[k].exp+=ev[tip];};
+    add('T',argmax(evT),evT);
+    const od=s.o.map(num);add('F',od.indexOf(Math.min(...od)),evT);
+    if(full(s.po)){const pP=probOf(s.po),evP=pP.map((p,i)=>p*pt[i]);add('P',argmax(evP),evP);}
+  });
+  return R;
+}
+async function resultsFor(n){
+  const r=await fetch('https://api.openligadb.de/getmatchdata/bl1/2026/'+n);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const d=await r.json();
+  return(Array.isArray(d)?d:[]).map(x=>{
+    let res=null,sc=null;
+    if(x.matchIsFinished){
+      const mr=x.matchResults||[];
+      const f=mr.find(y=>y.resultTypeID===2)||mr.slice().sort((a,b)=>(b.resultOrderID||0)-(a.resultOrderID||0))[0];
+      if(f&&f.pointsTeam1>=0&&f.pointsTeam2>=0){sc=[f.pointsTeam1,f.pointsTeam2];res=sc[0]>sc[1]?0:sc[0]<sc[1]?2:1;}
+    }
+    return{t1:x.team1&&x.team1.teamName,t2:x.team2&&x.team2.teamName,res,sc};
+  });
+}
+function csvH(H){
+  const rows=[['Spieltag','Heim','Gast','Stand','Tipico1','TipicoX','Tipico2','Pinnacle1','PinnacleX','Pinnacle2','Punkte1','PunkteX','Punkte2','Ergebnis','Tore']];
+  Object.values(H).sort((a,b)=>a.md-b.md).forEach(e=>{const s=e.snaps[e.snaps.length-1];if(!s)return;
+    rows.push([e.md,e.home,e.away,new Date(s.t).toISOString().slice(0,16).replace('T',' ')].concat(s.o,s.po,s.pt,[e.res==null?'':TAGS[e.res],e.sc?e.sc[0]+':'+e.sc[1]:'']));});
+  return rows.map(r=>r.join(';')).join('\n');
+}
+function Cmp({rows}){
+  return h('table',null,
+    h('thead',null,h('tr',null,h('th',null,'Spiel / Quelle'),...TAGS.map(t=>h('th',{key:t},t)),h('th',null,'Tipp'))),
+    rows.map(m=>{
+      const T=calc(m),P=calc({...m,o:m.po||['','','']});
+      const diff=T&&T.ev&&P&&P.ev&&T.best!==P.best;
+      const line=(lab,R,o)=>h('tr',{key:lab},
+        h('td',{className:'team'},lab,R&&h('div',{className:'lab'},'Marge '+fmt(R.margin,1)+' %')),
+        ...[0,1,2].map(j=>h('td',{key:j,className:R&&R.ev&&R.best===j?'best':''},o[j]||'–',R&&R.ev&&h('div',{className:'ew'},fmt(R.ev[j])))),
+        h('td',{className:'tp'+(R&&R.ev&&R.gap<0.3?' close':'')},R&&R.ev?[h('div',{key:1},TAGS[R.best]),h('div',{key:2,className:'ew'},'+'+fmt(R.gap))]:'–'));
+      return h('tbody',{key:m.id,className:'mg'},
+        h('tr',null,h('td',{className:'team'},h('b',null,m.home+' – '+m.away),diff&&h('div',{className:'lab',style:{color:'var(--warn)'}},'Tipico und Pinnacle weichen ab')),
+          ...[0,1,2].map(j=>h('td',{key:j,className:'lab'},m.pt[j]?m.pt[j]+' P.':'–')),h('td',null)),
+        line('Tipico',T,m.o),line('Pinnacle',P,m.po||['','','']));
+    }));
 }
 function load(){
   try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.data&&typeof s.data==='object'&&Array.isArray(s.cu))return s;}catch(e){}
@@ -231,11 +312,13 @@ function App(){
   const [paste,setPaste]=useState(false);
   const [ptxt,setPtxt]=useState('');
   const [cr,setCr]=useState(false);
+  const [hv,setHv]=useState(0);
+  const [exp,setExp]=useState('');
   useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}},[st]);
   const {tab,sel,data,cu}=st,put=p=>setSt({...st,...p});
   const cur=data[sel]||mkMd(sel);
   const setCur=l=>put({data:{...data,[sel]:l}});
-  const setOdd=(n,id,o)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>x.id===id?{...x,o,mk:{...(x.mk&&Date.now()-x.mk.t<EXP?x.mk:{}),o:dirs(x.o,o),t:Date.now()}}:x)}}));
+  const setOdd=(n,id,o,po)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>x.id===id?{...x,o,po:po||['','',''],mk:{...(x.mk&&Date.now()-x.mk.t<EXP?x.mk:{}),o:dirs(x.o,o),t:Date.now()}}:x)}}));
   const applyKt=()=>{
     const lines=ptxt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
     const games=[];let buf=[];
@@ -250,7 +333,7 @@ function App(){
     Object.keys(SP).forEach(k=>{const c=cnt(+k);if(c>bc){bc=c;best=+k;}});
     if(bc===0){setMsg('Die eingefügten Spiele passen zu keinem Spieltag.');return;}
     const list=data[best]||mkMd(best);let ok=0;
-    const nl=list.map(m=>{const g=games.find(g=>g.h===REV[m.home]&&g.a===REV[m.away]);if(!g)return m;ok++;return{...m,pt:g.pt,mk:{...(m.mk&&Date.now()-m.mk.t<EXP?m.mk:{}),pt:dirs(m.pt,g.pt),t:Date.now()}};});
+    const nl=list.map(m=>{const g=games.find(g=>g.h===REV[m.home]&&g.a===REV[m.away]);if(!g)return m;ok++;snapH(best,m,m.o,m.po,g.pt);return{...m,pt:g.pt,mk:{...(m.mk&&Date.now()-m.mk.t<EXP?m.mk:{}),pt:dirs(m.pt,g.pt),t:Date.now()}};});
     setSt(p=>({...p,sel:best,data:{...p.data,[best]:nl}}));
     setMsg(ok+' von '+list.length+' Spielen übernommen (Spieltag '+best+').'+(games.length>ok?' '+(games.length-ok)+' eingefügte Spiele nicht zugeordnet.':''));
     setPaste(false);setPtxt('');
@@ -270,7 +353,7 @@ function App(){
         if(!f){miss.push(m.home+' – '+m.away+' (nicht gefunden)');continue;}
         setMsg('Lade Tipico-Quoten '+(i+1)+'/'+cur.length+' …');
         await sleep(1100);
-        try{setOdd(sel,m.id,await oddsFor(f.id,key));ok++;}
+        try{const r=await oddsFor(f.id,key);setOdd(sel,m.id,r.t,r.p);snapH(sel,m,r.t,r.p,m.pt);ok++;}
         catch(e){miss.push(m.home+' – '+m.away+' (kein Tipico-Preis)');}
       }
       setMsg(ok+' von '+cur.length+' Spielen aktualisiert.'+(miss.length?' Fehlt: '+miss.join('; ')+'.':''));
@@ -286,11 +369,57 @@ function App(){
       let list=await fixturesFor(sel,key),f=findFx(list,m);
       if(!f){list=await fixturesFor(sel,key,true);f=findFx(list,m);}
       if(!f)throw new Error('Spiel bei OddsPapi nicht gefunden');
-      setOdd(sel,m.id,await oddsFor(f.id,key));
+      const r=await oddsFor(f.id,key);setOdd(sel,m.id,r.t,r.p);snapH(sel,m,r.t,r.p,m.pt);
       setMsg(m.home+' – '+m.away+': Quoten aktualisiert.');
     }catch(e){setMsg(m.home+' – '+m.away+': '+e.message+'.');}
     setBusy(false);
   };
+  const selEl=h('select',{className:'sel',value:sel,onChange:e=>{setMsg('');put({sel:+e.target.value});},'aria-label':'Spieltag'},
+    Object.keys(SP).map(n=>h('option',{key:n,value:n},n+'. Spieltag · '+SP[n][0].replace(/\.20(\d\d)/,'.$1'))));
+  const msgEl=msg&&h('p',{className:'note',style:{marginTop:0,color:'var(--warn)'}},msg);
+  const cmpView=h('div',null,selEl,msgEl,
+    h(Cmp,{rows:cur}),
+    h('p',{className:'note'},'Gleiche Kicktipp-Punkte, einmal mit Tipico-, einmal mit Pinnacle-Quoten gerechnet. Pinnacle hat meist die geringere Marge. Die Pinnacle-Quote kommt mit „Tipico-Quoten laden“ im selben Abruf. Fehlt sie bei einem Spiel, steht dort „–“.'));
+  const H=loadH(),R=evalH(H),nAll=Object.keys(H).length;
+  const setRes=(m,i)=>{const HH=loadH(),e=HH[mkey(sel,m)];if(!e)return;e.res=e.res===i?null:i;e.sc=null;saveH(HH);setHv(v=>v+1);};
+  const doExp=(txt,label)=>{setExp(txt);try{navigator.clipboard.writeText(txt).then(()=>setMsg(label+' kopiert.')).catch(()=>setMsg('Automatisches Kopieren nicht möglich. Text unten markieren und kopieren.'));}catch(e){setMsg('Text unten markieren und kopieren.');}};
+  const getRes=async()=>{
+    setBusy(true);setMsg('Lade Ergebnisse …');
+    try{
+      const HH=loadH();
+      const mds=[...new Set(Object.values(HH).filter(e=>e.res==null).map(e=>e.md))].sort((a,b)=>a-b);
+      if(!mds.length){setMsg('Keine offenen Spiele im Verlauf.');setBusy(false);return;}
+      let upd=0;
+      for(const n of mds){
+        const arr=await resultsFor(n);
+        arr.forEach(x=>{const e=HH[n+'|'+codeOf(x.t1)+'-'+codeOf(x.t2)];if(e&&e.res==null&&x.res!=null){e.res=x.res;e.sc=x.sc;upd++;}});
+      }
+      saveH(HH);setHv(v=>v+1);
+      const left=Object.values(HH).filter(e=>e.res==null).length;
+      setMsg(upd+' Ergebnisse eingetragen.'+(left?' '+left+' Spiele noch offen (noch nicht beendet oder nicht gefunden).':''));
+    }catch(e){setMsg('Ergebnisse konnten nicht geladen werden ('+e.message+'). Du kannst sie weiter von Hand eintragen.');}
+    setBusy(false);
+  };
+  const sRow=(lab,x)=>h('tr',{key:lab},h('td',{className:'team'},lab),h('td',null,x.n),h('td',null,x.n?fmt(x.pts,0):'–'),h('td',null,x.n?fmt(x.exp,1):'–'),h('td',null,x.n?fmt(x.pts/x.n):'–'));
+  const histView=h('div',null,selEl,
+    h('div',{className:'row act'},h('button',{className:'primary',disabled:busy,onClick:getRes},icCloud,busy?'Lädt …':'Ergebnisse holen')),
+    msgEl,
+    h('div',{className:'card'},
+      h('b',null,'Auswertung'),
+      h('p',{className:'note'},nAll+' Spiele gespeichert, '+R.all+' davon mit Ergebnis und vollständigen Daten.'),
+      h('table',null,
+        h('thead',null,h('tr',null,h('th',null,'Strategie'),h('th',null,'Spiele'),h('th',null,'Punkte'),h('th',null,'Erwartet'),h('th',null,'Ø'))),
+        h('tbody',null,sRow('EW mit Tipico',R.T),sRow('EW mit Pinnacle',R.P),sRow('Immer Favorit',R.F))),
+      h('p',{className:'note'},'„Erwartet“ ist die Punktzahl, die die jeweilige Strategie nach den Quoten im Schnitt bekommen sollte. Weicht „Punkte“ dauerhaft deutlich ab, stimmen die Wahrscheinlichkeiten nicht. Bei wenigen Spielen entscheidet der Zufall, aussagekräftig wird es erst nach vielen Spieltagen.')),
+    h('div',{className:'card'},
+      h('b',null,'Ergebnisse Spieltag '+sel),
+      h('p',{className:'note'},'„Ergebnisse holen“ trägt beendete Spiele automatisch ein. Von Hand geht es mit 1 (Heimsieg), X oder 2, nochmal tippen nimmt es zurück.'),
+      cur.map(m=>{const e=H[mkey(sel,m)];return h('div',{key:m.id,className:'srow2'},h('span',null,m.home+' – '+m.away,e&&e.sc?h('span',{className:'lab'},'  '+e.sc[0]+':'+e.sc[1]):null),
+        e?h('span',{className:'seg'},TAGS.map((t,i)=>h('button',{key:t,className:e.res===i?'on':'',onClick:()=>setRes(m,i)},t))):h('span',{className:'lab'},'keine Daten'));})),
+    h('div',{className:'row',style:{flexWrap:'wrap'}},
+      h('button',{onClick:()=>doExp(csvH(H),'CSV')},'Daten kopieren (CSV)'),
+      h('button',{onClick:()=>doExp(JSON.stringify(H),'Backup')},'Backup kopieren (JSON)')),
+    exp&&h('textarea',{readOnly:true,value:exp,rows:5,style:{marginTop:8}}));
   const legend=h('p',{className:'note'},'Je Feld: oben Quote, darunter Tippspiel-Punkte, klein der Erwartungswert. Grün = bester Tipp, gelb = knapp (Vorsprung unter 0,3).');
   return h('div',null,
     h('div',{className:'ttl'},h('h1',null,'Tippspiel-Rechner'),
@@ -302,6 +431,8 @@ function App(){
       h('p',null,'Spalten: 1 = Heimsieg, X = Unentschieden, 2 = Auswärtssieg. In jedem Feld steht oben die Tipico-Quote, darunter die Kicktipp-Punkte, klein der Erwartungswert. Grün = bester Tipp. Gelb = knapp (Vorsprung unter 0,3): dann kurz vor Anpfiff die Quote erneut laden.'),
       h('b',null,'Änderungen markieren'),
       h('p',null,'Nach jedem Laden (Tipico, einzeln oder alle) und nach „Kicktipp-Quoten einfügen“ zeigen kleine Pfeile, was sich gegenüber vorher geändert hat: ▲ grün = höher, ▼ rot = niedriger, • grau = geprüft und gleich. Die Markierungen bleiben 12 Stunden. Du kannst sie mit „Ausblenden“ über der Tabelle entfernen. Tippst du selbst einen Wert ein, verschwindet die Markierung an diesem Feld. Beim ersten Laden gibt es keinen Vergleichswert, dort erscheint kein Pfeil.'),
+      h('b',null,'Vergleich und Verlauf'),
+      h('p',null,'„Tipico-Quoten laden“ holt im selben Abruf auch die Pinnacle-Quote. Im Reiter „Vergleich“ siehst du pro Spiel beide Quellen mit Marge, Erwartungswert und Tipp. Bei jedem Laden und jedem Einfügen der Kicktipp-Punkte speichert die App Quoten und Punkte pro Spiel auf diesem Gerät. Nach den Spielen holt „Ergebnisse holen“ im Reiter „Verlauf“ die Endergebnisse automatisch (Quelle: OpenLigaDB, kostenlos, ohne OddsPapi-Abruf). Du kannst sie auch von Hand eintragen. Die Auswertung zeigt, wie viele Punkte der Erwartungswert-Tipp mit Tipico, mit Pinnacle und „Immer Favorit“ gebracht hätte. Mit „Daten kopieren“ sicherst du den Verlauf.'),
       h('b',null,'Quoten aktualisieren und Abrufe sparen'),
       h('p',null,'Erneut laden überschreibt die Quote, die Punkte bleiben. Kostenlos sind 250 Abrufe im Monat: alle 9 Spiele kosten bis zu 10, ein einzelnes Spiel 1 (beim ersten Mal eines Spieltags 2). Der Spielplan wird gemerkt.'),
       h('b',null,'Eigene Spiele'),
@@ -324,11 +455,12 @@ function App(){
       h('p',null,'Spielplan laut DFL, Stand 02.07.2026, Anstoßzeiten können sich ändern. Quoten ohne Gewähr. Fehlermeldungen erscheinen oben über der Tabelle.'),
       h('button',{onClick:()=>{setInfo(false);setCr(false);}},'Schließen')),
     h('div',{className:'tabs'},
-      h('button',{className:tab==='md'?'on':'',onClick:()=>put({tab:'md'})},'Bundesliga'),
-      h('button',{className:tab==='cu'?'on':'',onClick:()=>put({tab:'cu'})},'Eigene Spiele')),
+      h('button',{className:tab==='md'?'on':'',onClick:()=>{setMsg('');put({tab:'md'});}},'Bundesliga'),
+      h('button',{className:tab==='cmp'?'on':'',onClick:()=>{setMsg('');put({tab:'cmp'});}},'Vergleich'),
+      h('button',{className:tab==='hist'?'on':'',onClick:()=>{setMsg('');put({tab:'hist'});}},'Verlauf'),
+      h('button',{className:tab==='cu'?'on':'',onClick:()=>{setMsg('');put({tab:'cu'});}},'Eigene')),
     tab==='md'?h('div',null,
-      h('select',{className:'sel',value:sel,onChange:e=>{setMsg('');put({sel:+e.target.value});},'aria-label':'Spieltag'},
-        Object.keys(SP).map(n=>h('option',{key:n,value:n},n+'. Spieltag · '+SP[n][0].replace(/\.20(\d\d)/,'.$1')))),
+      selEl,
       h('div',{className:'row act'},
         h('button',{className:'primary',disabled:busy,onClick:getOdds},icCloud,busy?'Lädt …':'Tipico-Quoten laden'),
         h('button',{onClick:()=>setPaste(!paste)},icClip,'Kicktipp-Quoten einfügen')),
@@ -345,6 +477,8 @@ function App(){
       h(Tbl,{rows:cur,fixed:true,lock:busy,onLoad:loadOne,set:n=>setCur(cur.map(x=>x.id===n.id?n:x))}),
       legend,
       h('p',{className:'note'},'Spielplan: DFL, Stand 02.07.2026, Anstoßzeiten können sich ändern. Quoten: Tipico über OddsPapi, ohne Gewähr. Alle Werte lassen sich überschreiben.'))
+    :tab==='cmp'?cmpView
+    :tab==='hist'?histView
     :h('div',null,
       h(Tbl,{rows:cu,set:n=>put({cu:cu.map(x=>x.id===n.id?n:x)}),del:m=>put({cu:cu.length>1?cu.filter(x=>x.id!==m.id):[mk()]})}),
       h('div',{className:'row',style:{marginTop:10}},
