@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tippspiel-Rechner</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tippspiel">
+<meta name="referrer" content="no-referrer">
+<style>
+:root{--bg:#f3f5f0;--surface:#fff;--ink:#16210f;--muted:#5d6a52;--line:#d6dccd;--accent:#1f7a3a;--accent-bg:#dff1e3;--warn:#a65a00;--warn-bg:#fbeacb;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#10150d;--surface:#192114;--ink:#e8efe1;--muted:#9aa88d;--line:#2d3a25;--accent:#6fd08a;--accent-bg:#1f3a27;--warn:#f0b05a;--warn-bg:#3a2c12;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#10150d;--surface:#192114;--ink:#e8efe1;--muted:#9aa88d;--line:#2d3a25;--accent:#6fd08a;--accent-bg:#1f3a27;--warn:#f0b05a;--warn-bg:#3a2c12;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;line-height:1.4}
+#root{max-width:620px;margin:0 auto;padding:16px}
+h1{font-size:1.5rem;margin:4px 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:.9rem;margin:0 0 16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
+.top{display:flex;gap:8px;margin-bottom:10px}
+.top input{flex:1;min-width:0}
+input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 8px;width:100%;text-align:center}
+input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.grid{display:grid;grid-template-columns:72px repeat(3,1fr);gap:6px;align-items:center}
+.lab{font-size:.8rem;color:var(--muted)}
+.hd{font-weight:700;text-align:center;font-size:.9rem}
+.cell{text-align:center;padding:8px 0;border-radius:6px;font-variant-numeric:tabular-nums}
+.best{background:var(--accent-bg);color:var(--accent);font-weight:700}
+.res{margin-top:10px;padding:8px 10px;border-radius:6px;font-size:.92rem;background:var(--accent-bg)}
+.res.close{background:var(--warn-bg);color:var(--warn)}
+.res.none{background:transparent;color:var(--muted);padding-left:0}
+button{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:10px 14px;cursor:pointer}
+button:disabled{opacity:.6}button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:700}
+.x{padding:6px 10px;color:var(--muted)}
+.row{display:flex;gap:8px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}.tabs button{flex:1;padding:9px 6px;font-size:.9rem}.tabs button.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);font-weight:700}.srow{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:.92rem}.srow:last-child{border-bottom:0}.tip{font-weight:700;color:var(--accent)}.tipc{font-weight:700;color:var(--warn)}.note{font-size:.8rem;color:var(--muted);margin-top:14px}
+#root{padding:10px}h1{font-size:1.25rem}
+table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th{font-size:.8rem;color:var(--muted);padding:6px 2px;text-align:center;font-weight:600}
+th:first-child{text-align:left;padding-left:8px;width:30%}th:last-child{width:13%}
+td{padding:5px 3px;border-top:1px solid var(--line);text-align:center;vertical-align:middle}
+td input{padding:5px 2px;font-size:.85rem;margin-bottom:3px}
+td.team{text-align:left;font-size:.85rem;padding-left:8px;line-height:1.25}
+td.team input{text-align:left;padding:5px 4px}
+td.team .lab{font-size:.72rem}
+.ew{font-size:.72rem;color:var(--muted)}
+td.best{background:var(--accent-bg)}td.best .ew{color:var(--accent);font-weight:700}
+td.tp{font-weight:700;color:var(--accent);font-size:1.1rem}td.tp.close{color:var(--warn)}
+td .x{padding:2px 8px;font-size:.8rem}
+select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 6px;flex:1;min-width:0}
+.ttl{display:flex;align-items:center;gap:10px}.ttl h1{margin:4px 0}
+.ibtn{width:26px;height:26px;padding:0;border-radius:50%;font-weight:700;font-style:italic;font-family:Georgia,serif;line-height:1;color:var(--accent);border-color:var(--accent)}
+.infobox{margin-top:8px}.infobox p{margin:2px 0 10px;font-size:.9rem}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>
+const {useState,useEffect}=React,h=React.createElement;
+const KEY='tippspiel-v3';
+const num=s=>parseFloat(String(s).replace(',','.'));
+const fmt=(x,d=2)=>x.toFixed(d).replace('.',',');
+const mk=()=>({id:Math.random().toString(36).slice(2),home:'',away:'',info:'',o:['','',''],pt:['','','']});
+const STAND='19.11.2026, ca. 15 Uhr';
+const FIX=[
+['Bayern München','1. FC Köln','Fr 20.11., 20:30',[[1.08,11.5,25],[1.06,13,18],[1.10,12,17],[1.07,15,21],[1.09,13,23],[1.08,12.5,23],[1.07,12,21]]],
+['Bayer Leverkusen','SC Paderborn','Sa 21.11., 15:30',[[1.29,6,9.25],[1.24,6.75,8],[1.30,6.5,8.75],[1.29,6.5,8],[1.30,6,8.5],[1.29,5.75,8.25],[1.26,6.25,9.5]]],
+['Eintracht Frankfurt','TSG Hoffenheim','Sa 21.11., 15:30',[[2.35,3.95,2.67],[2.35,3.95,2.5],[2.35,3.95,2.7],[2.3,4,2.7],[2.3,3.9,2.7],[2.25,3.9,2.65],[2.33,3.85,2.63]]],
+['Union Berlin','RB Leipzig','Sa 21.11., 15:30',[[5.4,4.7,1.53],[5.1,4.8,1.49],[5.5,4.8,1.53],[5.5,4.75,1.5],[5.5,4.6,1.53],[5.25,4.5,1.52],[5.2,4.3,1.55]]],
+['Gladbach','Borussia Dortmund','Sa 21.11., 15:30',[[5.1,4.4,1.6],[4.9,4.6,1.54],[5.25,4.5,1.57],[5.25,4.33,1.57],[5,4.33,1.61],[4.8,4.2,1.6],[5.1,4.3,1.55]]],
+['SV Elversberg','SC Freiburg','Sa 21.11., 15:30',[[3.35,3.8,2.05],[3.3,3.85,1.96],[3.45,3.7,2.05],[3.6,3.75,1.95],[3.3,3.7,2.05],[3.3,3.6,2],[3.35,3.75,1.96]]],
+['Schalke 04','VfB Stuttgart','Sa 21.11., 18:30',[[3.85,4.05,1.85],[3.7,4.1,1.78],[3.85,4.1,1.83],[4.1,4,1.8],[4,3.9,1.8],[3.9,3.9,1.78],[3.75,3.95,1.81]]],
+['FC Augsburg','Mainz 05','So 22.11., 15:30',[[2.7,3.9,2.37],[2.6,3.9,2.3],[2.7,3.85,2.4],[2.7,3.8,2.38],[2.6,3.75,2.35],[2.65,3.8,2.32]]],
+['Werder Bremen','Hamburger SV','So 22.11., 17:30',[[1.7,4.15,4.5],[1.64,4.2,4.2],[1.73,4.1,4.4],[1.67,4.2,4.5],[1.71,3.9,4.33],[1.65,4.1,4.6]]]
+];
+const avg=b=>[0,1,2].map(j=>(b.reduce((a,x)=>a+x[j],0)/b.length).toFixed(2).replace('.',','));
+const TM={BAY:'Bayern München',BVB:'Borussia Dortmund',RBL:'RB Leipzig',STU:'VfB Stuttgart',B04:'Bayer Leverkusen',SGE:'Eintracht Frankfurt',SCF:'SC Freiburg',HOF:'TSG Hoffenheim',FCA:'FC Augsburg',M05:'Mainz 05',UNI:'Union Berlin',KOE:'1. FC Köln',BMG:'Gladbach',HSV:'Hamburger SV',SVW:'Werder Bremen',S04:'Schalke 04',SVE:'SV Elversberg',SCP:'SC Paderborn'};
+const SP={
+1:['28.–30.08.2026','BAY STU|BVB HSV|RBL BMG|SCF SVW|FCA S04|M05 SCP|UNI SGE|KOE HOF|SVE B04'],
+2:['04.–06.09.2026','STU KOE|HOF BVB|B04 UNI|SGE FCA|BMG SVE|HSV M05|SVW RBL|S04 BAY|SCP SCF'],
+3:['11.–13.09.2026','BVB SCP|RBL HSV|HOF STU|SCF BMG|FCA B04|M05 SGE|UNI S04|KOE SVW|SVE BAY'],
+4:['18.–20.09.2026','BAY UNI|STU BVB|B04 RBL|SGE SCF|BMG M05|HSV KOE|SVW FCA|S04 SVE|SCP HOF'],
+5:['09.–11.10.2026','BVB SVW|RBL SGE|HOF HSV|SCF S04|FCA BAY|M05 B04|UNI SVE|KOE BMG|SCP STU'],
+6:['16.–18.10.2026','BAY RBL|B04 SCF|SGE KOE|UNI BVB|BMG HOF|HSV STU|SVW SCP|S04 M05|SVE FCA'],
+7:['23.–25.10.2026','BVB SGE|RBL SVE|STU BMG|HOF B04|SCF BAY|FCA UNI|M05 SVW|KOE S04|SCP HSV'],
+8:['30.10.–01.11.2026','BAY BVB|B04 STU|SGE HSV|FCA SCF|UNI KOE|BMG SCP|SVW HOF|S04 RBL|SVE M05'],
+9:['06.–08.11.2026','BVB SVE|RBL FCA|STU SVW|HOF S04|SCF UNI|M05 BAY|HSV BMG|KOE B04|SCP SGE'],
+10:['20.–22.11.2026',''],
+11:['27.–29.11.2026','BVB B04|STU SGE|HOF FCA|SCF RBL|M05 UNI|HSV BAY|KOE SVE|SVW BMG|SCP S04'],
+12:['04.–06.12.2026','BAY SCP|RBL M05|B04 BMG|SCF HOF|SGE SVW|FCA KOE|UNI HSV|S04 BVB|SVE STU'],
+13:['11.–13.12.2026','BVB FCA|STU UNI|HOF BAY|M05 SCF|BMG SGE|HSV S04|KOE RBL|SVW B04|SCP SVE'],
+14:['18.–20.12.2026','BAY SVW|RBL BVB|B04 SGE|SCF STU|FCA SCP|M05 KOE|UNI HOF|S04 BMG|SVE HSV'],
+15:['08.–10.01.2027','BVB M05|STU FCA|HOF SVE|SGE S04|BMG BAY|HSV B04|KOE SCF|SVW UNI|SCP RBL'],
+16:['12.–14.01.2027','BAY B04|RBL STU|SCF HSV|FCA BMG|M05 HOF|UNI SCP|KOE BVB|S04 SVW|SVE SGE'],
+17:['15.–17.01.2027','BVB SCF|STU M05|HOF RBL|B04 S04|SGE BAY|BMG UNI|HSV FCA|SVW SVE|SCP KOE'],
+18:['22.–24.01.2027','STU BAY|HOF KOE|B04 SVE|SGE UNI|BMG RBL|HSV BVB|SVW SCF|S04 FCA|SCP M05'],
+19:['29.–31.01.2027','BAY S04|BVB HOF|RBL SVW|SCF SCP|FCA SGE|M05 HSV|UNI B04|KOE STU|SVE BMG'],
+20:['05.–07.02.2027','BAY SVE|STU HOF|B04 FCA|SGE M05|BMG SCF|HSV RBL|SVW KOE|S04 UNI|SCP BVB'],
+21:['12.–14.02.2027','BVB STU|RBL B04|HOF SCP|SCF SGE|FCA SVW|M05 BMG|UNI BAY|KOE HSV|SVE S04'],
+22:['19.–21.02.2027','BAY FCA|STU SCP|B04 M05|SGE RBL|BMG KOE|HSV HOF|SVW BVB|S04 SCF|SVE UNI'],
+23:['26.–28.02.2027','BVB UNI|RBL BAY|STU HSV|HOF BMG|SCF B04|FCA SVE|M05 S04|KOE SGE|SCP SVW'],
+24:['02.–04.03.2027','BAY SCF|B04 HOF|SGE BVB|UNI FCA|BMG STU|HSV SCP|SVW M05|S04 KOE|SVE RBL'],
+25:['05.–07.03.2027','BVB BAY|RBL S04|STU B04|HOF SVW|SCF FCA|M05 SVE|HSV SGE|KOE UNI|SCP BMG'],
+26:['12.–14.03.2027','BAY M05|B04 KOE|SGE SCP|FCA RBL|UNI SCF|BMG HSV|SVW STU|S04 HOF|SVE BVB'],
+27:['19.–21.03.2027','BVB BMG|RBL UNI|STU S04|HOF SGE|SCF SVE|M05 FCA|HSV SVW|KOE BAY|SCP B04'],
+28:['02.–04.04.2027','BAY HSV|RBL SCF|B04 BVB|SGE STU|FCA HOF|UNI M05|BMG SVW|S04 SCP|SVE KOE'],
+29:['09.–11.04.2027','BVB S04|STU SVE|HOF SCF|M05 RBL|BMG B04|HSV UNI|KOE FCA|SVW SGE|SCP BAY'],
+30:['16.–18.04.2027','BAY HOF|RBL KOE|B04 SVW|SCF M05|SGE BMG|FCA BVB|UNI STU|S04 HSV|SVE SCP'],
+31:['23.–25.04.2027','BVB RBL|STU SCF|HOF UNI|SGE B04|BMG S04|HSV SVE|KOE M05|SVW BAY|SCP FCA'],
+32:['07.–09.05.2027','BAY BMG|RBL SCP|B04 HSV|SCF KOE|FCA STU|M05 BVB|UNI SVW|S04 SGE|SVE HOF'],
+33:['14.–16.05.2027','BVB KOE|STU RBL|HOF M05|B04 BAY|SGE SVE|BMG FCA|HSV SCF|SVW S04|SCP UNI'],
+34:['22.05.2027, 15:30','BAY SGE|RBL HOF|SCF BVB|FCA HSV|M05 STU|UNI BMG|KOE SCP|S04 B04|SVE SVW']};
+const ODDS={10:FIX.map(f=>f[3])};
+const mkMd=n=>n===10?FIX.map((f,i)=>({id:'m10_'+i,home:f[0],away:f[1],info:f[2],o:['','',''],pt:['','','']}))
+  :SP[n][1].split('|').map((x,i)=>{const [a,b]=x.split(' ');return{id:'m'+n+'_'+i,home:TM[a],away:TM[b],info:'',o:['','',''],pt:['','','']};});
+function calc(m){
+  const o=m.o.map(num);
+  if(!o.every(x=>x>1))return null;
+  const inv=o.map(x=>1/x),s=inv.reduce((a,b)=>a+b,0),p=inv.map(x=>x/s);
+  const pt=m.pt.map(num);
+  if(!pt.every(x=>x>0))return{p,margin:(s-1)*100,ev:null};
+  const ev=p.map((x,i)=>x*pt[i]);
+  const order=[0,1,2].sort((a,b)=>ev[b]-ev[a]);
+  return{p,ev,margin:(s-1)*100,best:order[0],gap:ev[order[0]]-ev[order[1]]};
+}
+const TAGS=['1','X','2'];
+function In({v,on,ph}){return h('input',{value:v,placeholder:ph,inputMode:'decimal',onChange:e=>on(e.target.value)});}
+function Row({m,set,del,fixed}){
+  const r=calc(m),ok=r&&r.ev;
+  const upd=(k,j,v)=>set({...m,[k]:m[k].map((x,n)=>n===j?v:x)});
+  const cell=j=>h('td',{key:j,className:ok&&r.best===j?'best':''},
+    h(In,{v:m.o[j],ph:'Quote',on:v=>upd('o',j,v)}),
+    h(In,{v:m.pt[j],ph:'Pkt',on:v=>upd('pt',j,v)}),
+    ok&&h('div',{className:'ew'},fmt(r.ev[j])));
+  return h('tr',null,
+    h('td',{className:'team'},fixed?[h('div',{key:1},m.home),h('div',{key:2},m.away),h('div',{key:3,className:'lab'},m.info)]
+      :[h('input',{key:1,value:m.home,placeholder:'Heim',onChange:e=>set({...m,home:e.target.value})}),
+        h('input',{key:2,value:m.away,placeholder:'Gast',onChange:e=>set({...m,away:e.target.value})}),
+        h('button',{key:3,className:'x',onClick:del,'aria-label':'Spiel löschen'},'✕')]),
+    cell(0),cell(1),cell(2),
+    h('td',{className:'tp'+(ok&&r.gap<0.3?' close':'')},ok?[h('div',{key:1},TAGS[r.best]),h('div',{key:2,className:'ew'},'+'+fmt(r.gap))]:'–'));
+}
+function Tbl({rows,set,del,fixed}){
+  return h('table',null,
+    h('thead',null,h('tr',null,h('th',null,'Spiel'),...TAGS.map(t=>h('th',{key:t},t)),h('th',null,'Tipp'))),
+    h('tbody',null,rows.map(m=>h(Row,{key:m.id,m,fixed,set:set,del:del&&(()=>del(m))}))));
+}
+const KEYK='oddspapi-key-v1';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const REV=Object.fromEntries(Object.entries(TM).map(([k,v])=>[v,k]));
+const PAT=[['BAY','bayern'],['BVB','dortmund'],['RBL','leipzig'],['STU','stuttgart'],['B04','leverkusen'],['SGE','frankfurt'],['SCF','freiburg'],['HOF','hoffenheim'],['FCA','augsburg'],['M05','mainz'],['UNI','union'],['KOE','koln|cologne'],['BMG','monchengladbach|gladbach'],['HSV','hamburg'],['SVW','bremen'],['S04','schalke'],['SVE','elversberg'],['SCP','paderborn']];
+const codeOf=name=>{const n=String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const p=PAT.find(x=>new RegExp(x[1]).test(n));return p?p[0]:null;};
+async function api(ep,params,key){
+  const q=new URLSearchParams({apiKey:key,...params});
+  for(let t=0;t<4;t++){
+    const r=await fetch('https://api.oddspapi.io/v4/'+ep+'?'+q);
+    if(r.status===429){await sleep(2200);continue;}
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }
+  throw new Error('Zu viele Anfragen (429)');
+}
+function windowOf(n){
+  const m=SP[n][0].match(/(\d{2})\.(\d{2})\.(\d{4})/),end=Date.UTC(+m[3],+m[2]-1,+m[1]);
+  const iso=t=>new Date(t).toISOString();
+  return[iso(end-5*864e5).slice(0,10)+'T00:00:00Z',iso(end+864e5).slice(0,10)];
+}
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.data&&typeof s.data==='object'&&Array.isArray(s.cu))return s;}catch(e){}
+  return{tab:'md',sel:10,data:{},cu:[mk()]};
+}
+function App(){
+  const [st,setSt]=useState(load);
+  const [msg,setMsg]=useState('');
+  const [info,setInfo]=useState(false);
+  const [key,setKey]=useState(()=>{try{return localStorage.getItem(KEYK)||'';}catch(e){return '';}});
+  const [keyIn,setKeyIn]=useState('');
+  const [busy,setBusy]=useState(false);
+  useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}},[st]);
+  const {tab,sel,data,cu}=st,put=p=>setSt({...st,...p});
+  const cur=data[sel]||mkMd(sel);
+  const setCur=l=>put({data:{...data,[sel]:l}});
+  const setOdd=(n,id,o)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>x.id===id?{...x,o}:x)}}));
+  const getOdds=async()=>{
+    if(!key){setInfo(true);setMsg('Bitte zuerst den API-Schlüssel eintragen.');return;}
+    setBusy(true);setMsg('Lade Spielplan …');
+    try{
+      const [from,to]=windowOf(sel);
+      const fx=await api('fixtures',{tournamentId:35,from,to},key);
+      const list=Array.isArray(fx)?fx:(fx&&fx.fixtures)||[];
+      let ok=0;const miss=[];
+      for(let i=0;i<cur.length;i++){
+        const m=cur[i],ha=REV[m.home],aw=REV[m.away];
+        const f=list.find(x=>codeOf(x.participant1Name)===ha&&codeOf(x.participant2Name)===aw);
+        if(!f){miss.push(m.home+' – '+m.away+' (nicht gefunden)');continue;}
+        setMsg('Lade Tipico-Quoten '+(i+1)+'/'+cur.length+' …');
+        await sleep(1100);
+        try{
+          const d=await api('odds',{fixtureId:f.fixtureId,bookmakers:'tipico'},key);
+          const oc=d.bookmakerOdds.tipico.markets['101'].outcomes;
+          const pr=['101','102','103'].map(k=>oc[k].players['0'].price);
+          if(!pr.every(x=>x>1))throw new Error('kein Preis');
+          setOdd(sel,m.id,pr.map(x=>Number(x).toFixed(2).replace('.',',')));ok++;
+        }catch(e){miss.push(m.home+' – '+m.away+' (kein Tipico-Preis)');}
+      }
+      setMsg(ok+' von '+cur.length+' Spielen aktualisiert.'+(miss.length?' Fehlt: '+miss.join('; ')+'.':''));
+    }catch(e){
+      setMsg('Abruf fehlgeschlagen: '+e.message+'. Prüfe den API-Schlüssel und die Internetverbindung.');
+    }
+    setBusy(false);
+  };
+  const legend=h('p',{className:'note'},'Je Feld: oben Quote, darunter Tippspiel-Punkte, klein der Erwartungswert. Grün = bester Tipp, gelb = knapp (Vorsprung unter 0,3).');
+  return h('div',null,
+    h('div',{className:'ttl'},h('h1',null,'Tippspiel-Rechner'),
+      h('button',{className:'ibtn','aria-label':'Info zu den Quoten','aria-expanded':info,onClick:()=>setInfo(!info)},'i')),
+    info&&h('div',{className:'card infobox'},
+      h('b',null,'Quoten abrufen'),
+      h('p',null,'Spieltag wählen und „Tipico-Quoten laden“ tippen. Die Seite holt die Tipico-Quote (1, X, 2) für jedes Spiel über OddsPapi und trägt sie ein. Deine Tippspiel-Punkte bleiben erhalten.'),
+      h('b',null,'Aktualisieren'),
+      h('p',null,'Einfach nochmal laden, am besten kurz vor Anpfiff. Das überschreibt die Quoten. Ein Spieltag verbraucht bis zu 10 der 250 kostenlosen Abrufe im Monat.'),
+      h('b',null,'API-Schlüssel'),
+      h('p',null,key?'Gespeichert in diesem Browser. Er wird nur an OddsPapi gesendet.':'Kostenlosen Schlüssel auf oddspapi.io erstellen und hier einfügen. Er bleibt nur in diesem Browser.'),
+      h('div',{className:'row',style:{marginBottom:10}},
+        h('input',{type:'password',value:keyIn,placeholder:key?'Neuer Schlüssel':'API-Schlüssel',autoComplete:'off',onChange:e=>setKeyIn(e.target.value),style:{textAlign:'left'}}),
+        h('button',{onClick:()=>{const v=keyIn.trim();if(!v)return;try{localStorage.setItem(KEYK,v);}catch(e){}setKey(v);setKeyIn('');setMsg('Schlüssel gespeichert.');}},'Speichern'),
+        key&&h('button',{onClick:()=>{try{localStorage.removeItem(KEYK);}catch(e){}setKey('');}},'Löschen')),
+      h('b',null,'Selbst anpassen'),
+      h('p',null,'Jede Quote lässt sich jederzeit von Hand überschreiben.'),
+      h('button',{onClick:()=>setInfo(false)},'Schließen')),
+    h('div',{className:'tabs'},
+      h('button',{className:tab==='md'?'on':'',onClick:()=>put({tab:'md'})},'Bundesliga'),
+      h('button',{className:tab==='cu'?'on':'',onClick:()=>put({tab:'cu'})},'Eigene Spiele')),
+    tab==='md'?h('div',null,
+      h('div',{className:'row',style:{marginBottom:10,flexWrap:'wrap'}},
+        h('select',{value:sel,onChange:e=>{setMsg('');put({sel:+e.target.value});},'aria-label':'Spieltag'},
+          Object.keys(SP).map(n=>h('option',{key:n,value:n},n+'. Spieltag · '+SP[n][0]))),
+        h('button',{className:'primary',disabled:busy,onClick:getOdds},busy?'Lädt …':'Tipico-Quoten laden'),
+        h('button',{onClick:()=>{setMsg('');setCur(mkMd(sel));},'aria-label':'Spieltag zurücksetzen'},'↺')),
+      msg&&h('p',{className:'note',style:{marginTop:0,color:'var(--warn)'}},msg),
+      h(Tbl,{rows:cur,fixed:true,set:n=>setCur(cur.map(x=>x.id===n.id?n:x))}),
+      legend,
+      h('p',{className:'note'},'Spielplan: DFL, Stand 02.07.2026, Anstoßzeiten können sich ändern. Quoten: Tipico über OddsPapi, ohne Gewähr. Alle Werte lassen sich überschreiben.'))
+    :h('div',null,
+      h(Tbl,{rows:cu,set:n=>put({cu:cu.map(x=>x.id===n.id?n:x)}),del:m=>put({cu:cu.length>1?cu.filter(x=>x.id!==m.id):[mk()]})}),
+      h('div',{className:'row',style:{marginTop:10}},
+        h('button',{className:'primary',onClick:()=>put({cu:[...cu,mk()]})},'Spiel hinzufügen'),
+        h('button',{onClick:()=>put({cu:[mk()]})},'Leeren')),
+      legend));
+}
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
