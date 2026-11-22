@@ -76,6 +76,9 @@ button.danger{background:var(--warn);color:var(--bg);border-color:var(--warn);fo
 tbody.mg tr:first-child td{border-top:2px solid var(--line)}
 .srow2{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.85rem}.srow2:last-child{border-bottom:0}
 .seg{display:flex;gap:4px}.seg button{padding:4px 12px;font-size:.85rem}.seg button.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);font-weight:700}
+.evu{color:var(--up);font-weight:700}.evd{color:var(--dn);font-weight:700}
+td.tp.chg{background:color-mix(in srgb,var(--warn) 20%,var(--bg))}
+.was{font-size:.68rem;color:var(--warn);font-weight:400}
 </style>
 </head>
 <body>
@@ -166,18 +169,21 @@ function Row({m,set,del,fixed,onLoad,lock}){
   const r=calc(m),ok=r&&r.ev;
   const live=m.mk&&Date.now()-m.mk.t<EXP;
   const dr=(k,j)=>live&&m.mk[k]?m.mk[k][j]:null;
+  const pe=live&&ok&&m.mk.pe?m.mk.pe:null;
+  const ed=j=>pe?Math.sign(Math.round(r.ev[j]*100)-Math.round(pe[j]*100)):0;
+  const tipCh=!!pe&&m.mk.pb!=null&&m.mk.pb!==r.best;
   const upd=(k,j,v)=>set({...m,[k]:m[k].map((x,n)=>n===j?v:x),mk:m.mk&&m.mk[k]?{...m.mk,[k]:m.mk[k].map((d,n)=>n===j?null:d)}:m.mk});
   const cell=j=>h('td',{key:j,className:ok&&r.best===j?'best':''},
     h(In,{v:m.o[j],ph:'Quote',dir:dr('o',j),on:v=>upd('o',j,v)}),
     h(In,{v:m.pt[j],ph:'Pkt',dir:dr('pt',j),on:v=>upd('pt',j,v)}),
-    ok&&h('div',{className:'ew'},fmt(r.ev[j])));
+    ok&&h('div',{className:'ew'},fmt(r.ev[j]),ed(j)?h('span',{className:ed(j)>0?'evu':'evd'},ed(j)>0?' ▲':' ▼'):null));
   return h('tr',null,
     h('td',{className:'team'},fixed?[h('div',{key:1},m.home),h('div',{key:2},m.away),h('div',{key:3,className:'lab'},m.info),onLoad&&h('button',{key:4,className:'ld',disabled:lock,onClick:onLoad,'aria-label':'Quoten dieses Spiels laden'},'↻ Quote')]
       :[h('input',{key:1,value:m.home,placeholder:'Heim',onChange:e=>set({...m,home:e.target.value})}),
         h('input',{key:2,value:m.away,placeholder:'Gast',onChange:e=>set({...m,away:e.target.value})}),
         h('button',{key:3,className:'x',onClick:del,'aria-label':'Spiel löschen'},'✕')]),
     cell(0),cell(1),cell(2),
-    h('td',{className:'tp'+(ok&&r.gap<0.3?' close':'')},ok?[h('div',{key:1},TAGS[r.best]),h('div',{key:2,className:'ew'},'+'+fmt(r.gap))]:'–'));
+    h('td',{className:'tp'+(ok&&r.gap<0.3?' close':'')+(tipCh?' chg':'')},ok?[h('div',{key:1},TAGS[r.best]),h('div',{key:2,className:'ew'},'+'+fmt(r.gap)),tipCh?h('div',{key:3,className:'was'},'war '+TAGS[m.mk.pb]):null]:'–'));
 }
 function Tbl({rows,set,del,fixed,onLoad,lock}){
   return h('table',null,
@@ -318,7 +324,7 @@ function App(){
   const {tab,sel,data,cu}=st,put=p=>setSt({...st,...p});
   const cur=data[sel]||mkMd(sel);
   const setCur=l=>put({data:{...data,[sel]:l}});
-  const setOdd=(n,id,o,po)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>x.id===id?{...x,o,po:po||['','',''],mk:{...(x.mk&&Date.now()-x.mk.t<EXP?x.mk:{}),o:dirs(x.o,o),t:Date.now()}}:x)}}));
+  const setOdd=(n,id,o,po)=>setSt(p=>({...p,data:{...p.data,[n]:(p.data[n]||mkMd(n)).map(x=>{if(x.id!==id)return x;const pc=calc(x);return{...x,o,po:po||['','',''],mk:{...(x.mk&&Date.now()-x.mk.t<EXP?x.mk:{}),o:dirs(x.o,o),t:Date.now(),pe:pc&&pc.ev?pc.ev:null,pb:pc&&pc.ev?pc.best:null}};})}}));
   const applyKt=()=>{
     const lines=ptxt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
     const games=[];let buf=[];
@@ -333,7 +339,7 @@ function App(){
     Object.keys(SP).forEach(k=>{const c=cnt(+k);if(c>bc){bc=c;best=+k;}});
     if(bc===0){setMsg('Die eingefügten Spiele passen zu keinem Spieltag.');return;}
     const list=data[best]||mkMd(best);let ok=0;
-    const nl=list.map(m=>{const g=games.find(g=>g.h===REV[m.home]&&g.a===REV[m.away]);if(!g)return m;ok++;snapH(best,m,m.o,m.po,g.pt);return{...m,pt:g.pt,mk:{...(m.mk&&Date.now()-m.mk.t<EXP?m.mk:{}),pt:dirs(m.pt,g.pt),t:Date.now()}};});
+    const nl=list.map(m=>{const g=games.find(g=>g.h===REV[m.home]&&g.a===REV[m.away]);if(!g)return m;ok++;snapH(best,m,m.o,m.po,g.pt);const pc=calc(m);return{...m,pt:g.pt,mk:{...(m.mk&&Date.now()-m.mk.t<EXP?m.mk:{}),pt:dirs(m.pt,g.pt),t:Date.now(),pe:pc&&pc.ev?pc.ev:null,pb:pc&&pc.ev?pc.best:null}};});
     setSt(p=>({...p,sel:best,data:{...p.data,[best]:nl}}));
     setMsg(ok+' von '+list.length+' Spielen übernommen (Spieltag '+best+').'+(games.length>ok?' '+(games.length-ok)+' eingefügte Spiele nicht zugeordnet.':''));
     setPaste(false);setPtxt('');
@@ -430,7 +436,7 @@ function App(){
       h('b',null,'Tabelle lesen'),
       h('p',null,'Spalten: 1 = Heimsieg, X = Unentschieden, 2 = Auswärtssieg. In jedem Feld steht oben die Tipico-Quote, darunter die Kicktipp-Punkte, klein der Erwartungswert. Grün = bester Tipp. Gelb = knapp (Vorsprung unter 0,3): dann kurz vor Anpfiff die Quote erneut laden.'),
       h('b',null,'Änderungen markieren'),
-      h('p',null,'Nach jedem Laden (Tipico, einzeln oder alle) und nach „Kicktipp-Quoten einfügen“ zeigen kleine Pfeile, was sich gegenüber vorher geändert hat: ▲ grün = höher, ▼ rot = niedriger, • grau = geprüft und gleich. Die Markierungen bleiben 12 Stunden. Du kannst sie mit „Ausblenden“ über der Tabelle entfernen. Tippst du selbst einen Wert ein, verschwindet die Markierung an diesem Feld. Beim ersten Laden gibt es keinen Vergleichswert, dort erscheint kein Pfeil.'),
+      h('p',null,'Nach jedem Laden (Tipico, einzeln oder alle) und nach „Kicktipp-Quoten einfügen“ zeigen kleine Pfeile, was sich gegenüber vorher geändert hat: ▲ grün = höher, ▼ rot = niedriger, • grau = geprüft und gleich. Auch der Erwartungswert bekommt einen Pfeil, wenn er sich geändert hat. Ändert sich dadurch der empfohlene Tipp, wird die Tipp-Spalte hervorgehoben und zeigt darunter „war 1“ (der bisherige Tipp). Verglichen wird immer mit dem Stand vor dem letzten Laden oder Einfügen. Die Markierungen bleiben 12 Stunden. Du kannst sie mit „Ausblenden“ über der Tabelle entfernen. Tippst du selbst einen Wert ein, verschwindet die Markierung an diesem Feld. Beim ersten Laden gibt es keinen Vergleichswert, dort erscheint kein Pfeil.'),
       h('b',null,'Vergleich und Verlauf'),
       h('p',null,'„Tipico-Quoten laden“ holt im selben Abruf auch die Pinnacle-Quote. Im Reiter „Vergleich“ siehst du pro Spiel beide Quellen mit Marge, Erwartungswert und Tipp. Bei jedem Laden und jedem Einfügen der Kicktipp-Punkte speichert die App Quoten und Punkte pro Spiel auf diesem Gerät. Nach den Spielen holt „Ergebnisse holen“ im Reiter „Verlauf“ die Endergebnisse automatisch (Quelle: OpenLigaDB, kostenlos, ohne OddsPapi-Abruf). Du kannst sie auch von Hand eintragen. Die Auswertung zeigt, wie viele Punkte der Erwartungswert-Tipp mit Tipico, mit Pinnacle und „Immer Favorit“ gebracht hätte. Mit „Daten kopieren“ sicherst du den Verlauf.'),
       h('b',null,'Quoten aktualisieren und Abrufe sparen'),
